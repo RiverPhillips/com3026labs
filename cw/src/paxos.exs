@@ -14,22 +14,24 @@ defmodule Paxos do
   def init(nodes, upper_layer, name) do
     state = %{
       name: name,
-      maxBallotNumber: 1,
-      maxBallotNumberVote: nil,
-      prepareResults: [],
+      maxBallotNumber: 0,
+      prevVotes: %{},
+      prepareResults: %{},
+      acceptResults: %{},
       nodes: nodes,
-      upper_layer: upper_layer
+      upperLayer: upper_layer,
+      proposedValue: nil
     }
 
     run(state)
   end
 
   def propose(name, value) do
-    send(:global.whereis_name(name), value)
+    send_msg(name, {:propose, value})
   end
 
   def start_ballot(name) do
-    send(:global.whereis_name(name), {:start_ballot})
+    send_msg(name, {:start_ballot})
   end
 
   defp generate_ballot_number(maxBallotNumber, nodes) do
@@ -38,8 +40,34 @@ defmodule Paxos do
 
   defp beb(recipients, msg) do
     for r <- recipients do
-      send(:global.whereis_name(r), msg)
+      send_msg(r, msg)
     end
+  end
+
+  defp send_msg(name, msg) do
+    case :global.whereis_name(name) do
+      :undefined ->
+        nil
+
+      pid ->
+        send(pid, msg)
+    end
+  end
+
+  defp delete_all_occurences(list, element) do
+    _delete_all_occurences(list, element, [])
+  end
+
+  defp _delete_all_occurences([head | tail], element, list) when head === element do
+    _delete_all_occurences(tail, element, list)
+  end
+
+  defp _delete_all_occurences([head | tail], element, list) do
+    _delete_all_occurences(tail, element, [head | list])
+  end
+
+  defp _delete_all_occurences([], _element, list) do
+    list
   end
 
   defp run(state) do
@@ -47,32 +75,134 @@ defmodule Paxos do
       receive do
         {:start_ballot} ->
           ballotNumber = generate_ballot_number(state.maxBallotNumber, state.nodes)
-          beb(state.nodes, {:prepare, {ballotNumber, state.name}})
+          beb(state.nodes, {:prepare, {0, state.name}})
           state = %{state | maxBallotNumber: ballotNumber}
           state
 
         {:prepare, {b, senderName}} ->
-          if state.maxBallotNumber > b do
-            send(
-              :global.whereis_name(senderName),
-              {:prepared, b, {state.maxBallotNumber, state.maxBallotNumberVote}}
+          if state.maxBallotNumber > b && Map.has_key?(state.prevVotes, state.maxBallotNumber) do
+            send_msg(
+              senderName,
+              {
+                :prepared,
+                b,
+                {state.maxBallotNumber, Map.get(state.prevVotes, state.maxBallotNumber)}
+              }
             )
           else
-            send(:global.whereis_name(senderName), {:prepared, b, {:none}})
+            send_msg(senderName, {:prepared, b, {:none}})
           end
 
           state
 
         {:prepared, b, x} ->
-          state = %{state | prepareResults: [x | state.prepareResults]}
+          state = %{
+            state
+            | prepareResults:
+                Map.put(state.prepareResults, b, [x | Map.get(state.prepareResults, b, [])])
+          }
 
-          if length(state.prepareResults) == length(state.nodes) do
-            IO.puts("all prepare results received")
+          if length(Map.get(state.prepareResults, b, [])) ==
+               Integer.floor_div(length(state.nodes), 2) + 1 do
+            IO.puts("prepare results quorum received")
 
-            # Move onto next step all prepare results received
+            if List.foldl(Map.get(state.prepareResults, b, []), true, fn elem, acc ->
+                 elem == {:none} && acc
+               end) do
+              IO.puts("all prepare results were none")
+
+              IO.puts("value proposed #{state.proposedValue}")
+
+              beb(
+                state.nodes,
+                {:accept, state.maxBallotNumber, state.proposedValue, state.name}
+              )
+
+              state = %{
+                state
+                | prevVotes: Map.put(state.prevVotes, state.maxBallotNumber, state.proposedValue)
+              }
+
+              state
+            else
+              IO.puts("not all results were none")
+
+              resultList = delete_all_occurences(Map.get(state.prepareResults, b, []), {:none})
+
+              {maxBallotNumber, maxBallotRes} =
+                List.foldl(resultList, {0, nil}, fn {ballotNumber, ballotRes},
+                                                    {accBallotNumber, accBallotRes} ->
+                  if ballotNumber > accBallotNumber do
+                    {ballotNumber, ballotRes}
+                  else
+                    {accBallotNumber, accBallotRes}
+                  end
+                end)
+
+              IO.puts("#{maxBallotNumber}, #{maxBallotRes}")
+
+              beb(state.nodes, {:accept, maxBallotNumber, maxBallotRes, state.name})
+
+              state = %{
+                state
+                | maxBallotNumber: maxBallotNumber,
+                  prevVotes: Map.put(state.prevVotes, maxBallotNumber, maxBallotRes)
+              }
+
+              state
+            end
+          else
+            state
+          end
+
+        {:accept, ballotNumber, result, sender} ->
+          if state.maxBallotNumber <= ballotNumber do
+            state = %{
+              state
+              | maxBallotNumber: ballotNumber,
+                prevVotes: Map.put(state.prevVotes, ballotNumber, result)
+            }
+
+            send_msg(sender, {:accepted, ballotNumber})
+
+            state
+          else
+            state
+          end
+
+        {:accepted, ballotNumber} ->
+          # Check quorum of accepted received
+          IO.puts("accepted received")
+
+          state = %{
+            state
+            | acceptResults:
+                Map.put(
+                  state.acceptResults,
+                  ballotNumber,
+                  Map.get(state.acceptResults, ballotNumber, 0) + 1
+                )
+          }
+
+          IO.puts("Required quorum size: #{Integer.floor_div(length(state.nodes), 2) + 1}")
+
+          if(
+            Map.get(state.acceptResults, ballotNumber, 0) ==
+              Integer.floor_div(length(state.nodes), 2) + 1
+          ) do
+            IO.puts("Accepted quorum achieved")
+            beb([state.nodes], {:decided, Map.get(state.prevVotes, ballotNumber)})
+            IO.puts("decided broadcast")
           end
 
           state
+
+        {:decided, v} ->
+          send_msg(state.upperLayer, {:decided, v})
+          state
+
+        {:propose, value} ->
+          %{state | proposedValue: value}
 
         _ ->
           state
