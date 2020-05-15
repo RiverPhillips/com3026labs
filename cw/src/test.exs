@@ -11,11 +11,11 @@ for {p, v} <- [{:p1, :a}, {:p2, :b}, {:p3, :c}], do: Paxos.propose(p, v)
 
 Paxos.start_ballot(:p1)
 
-# IO.puts("killing pid2")
-# Process.exit(pid2, :kill)
-# IO.puts("pid2 killed")
+IO.puts("killing pid3")
+Process.exit(pid3, :kill)
+IO.puts("pid3 killed")
 
-for _ <- 1..1 do
+for _ <- 1..3 do
   receive do
     {:decided, value} ->
       IO.puts(value)
@@ -25,8 +25,6 @@ for _ <- 1..1 do
 end
 
 Process.exit(pid1, :kill)
-
-# Process.exit(pid2, :kill)
-# Process.exit(pid3, :kill)
+Process.exit(pid2, :kill)
 
 Process.exit(self(), :kill)

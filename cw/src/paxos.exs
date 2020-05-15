@@ -104,14 +104,10 @@ defmodule Paxos do
 
           if length(Map.get(state.prepareResults, b, [])) ==
                Integer.floor_div(length(state.nodes), 2) + 1 do
-            IO.puts("prepare results quorum received")
 
             if List.foldl(Map.get(state.prepareResults, b, []), true, fn elem, acc ->
                  elem == {:none} && acc
                end) do
-              IO.puts("all prepare results were none")
-
-              IO.puts("value proposed #{state.proposedValue}")
 
               beb(
                 state.nodes,
@@ -125,7 +121,6 @@ defmodule Paxos do
 
               state
             else
-              IO.puts("not all results were none")
 
               resultList = delete_all_occurences(Map.get(state.prepareResults, b, []), {:none})
 
@@ -139,7 +134,6 @@ defmodule Paxos do
                   end
                 end)
 
-              IO.puts("#{maxBallotNumber}, #{maxBallotRes}")
 
               beb(state.nodes, {:accept, maxBallotNumber, maxBallotRes, state.name})
 
@@ -172,7 +166,6 @@ defmodule Paxos do
 
         {:accepted, ballotNumber} ->
           # Check quorum of accepted received
-          IO.puts("accepted received")
 
           state = %{
             state
@@ -184,15 +177,12 @@ defmodule Paxos do
                 )
           }
 
-          IO.puts("Required quorum size: #{Integer.floor_div(length(state.nodes), 2) + 1}")
 
           if(
             Map.get(state.acceptResults, ballotNumber, 0) ==
               Integer.floor_div(length(state.nodes), 2) + 1
           ) do
-            IO.puts("Accepted quorum achieved")
-            beb([state.nodes], {:decided, Map.get(state.prevVotes, ballotNumber)})
-            IO.puts("decided broadcast")
+            beb(state.nodes, {:decided, Map.get(state.prevVotes, ballotNumber)})
           end
 
           state
