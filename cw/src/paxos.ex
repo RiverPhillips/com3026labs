@@ -26,12 +26,12 @@ defmodule Paxos do
     run(state)
   end
 
-  def propose(name, value) do
-    send_msg(name, {:propose, value})
+  def propose(pid, value) do
+    send(pid, {:propose, value})
   end
 
-  def start_ballot(name) do
-    send_msg(name, {:start_ballot})
+  def start_ballot(pid) do
+    send(pid, {:start_ballot})
   end
 
   defp generate_ballot_number(maxBallotNumber, nodes) do
@@ -45,13 +45,9 @@ defmodule Paxos do
   end
 
   defp send_msg(name, msg) do
-    case :global.whereis_name(name) do
-      :undefined ->
-        nil
+    pid = :global.whereis_name(name)
 
-      pid ->
-        send(pid, msg)
-    end
+    send(pid, msg)
   end
 
   defp delete_all_occurences(list, element) do
@@ -104,11 +100,9 @@ defmodule Paxos do
 
           if length(Map.get(state.prepareResults, b, [])) ==
                Integer.floor_div(length(state.nodes), 2) + 1 do
-
             if List.foldl(Map.get(state.prepareResults, b, []), true, fn elem, acc ->
                  elem == {:none} && acc
                end) do
-
               beb(
                 state.nodes,
                 {:accept, state.maxBallotNumber, state.proposedValue, state.name}
@@ -121,7 +115,6 @@ defmodule Paxos do
 
               state
             else
-
               resultList = delete_all_occurences(Map.get(state.prepareResults, b, []), {:none})
 
               {maxBallotNumber, maxBallotRes} =
@@ -133,7 +126,6 @@ defmodule Paxos do
                     {accBallotNumber, accBallotRes}
                   end
                 end)
-
 
               beb(state.nodes, {:accept, maxBallotNumber, maxBallotRes, state.name})
 
@@ -177,7 +169,6 @@ defmodule Paxos do
                 )
           }
 
-
           if(
             Map.get(state.acceptResults, ballotNumber, 0) ==
               Integer.floor_div(length(state.nodes), 2) + 1
@@ -188,7 +179,8 @@ defmodule Paxos do
           state
 
         {:decided, v} ->
-          send_msg(state.upperLayer, {:decided, v})
+          IO.puts("node #{state.name} decided #{v}")
+          send(state.upperLayer, {:decide, v})
           state
 
         {:propose, value} ->
