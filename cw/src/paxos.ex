@@ -99,7 +99,7 @@ defmodule Paxos do
           }
 
           if length(Map.get(state.prepareResults, b, [])) ==
-               Integer.floor_div(length(state.nodes), 2) + 1 do
+               div(length(state.nodes), 2) + 1 do
             if List.foldl(Map.get(state.prepareResults, b, []), true, fn elem, acc ->
                  elem == {:none} && acc
                end) do
@@ -171,7 +171,7 @@ defmodule Paxos do
 
           if(
             Map.get(state.acceptResults, ballotNumber, 0) ==
-              Integer.floor_div(length(state.nodes), 2) + 1
+              div(length(state.nodes), 2) + 1
           ) do
             beb(state.nodes, {:decided, Map.get(state.prevVotes, ballotNumber)})
           end
@@ -179,7 +179,6 @@ defmodule Paxos do
           state
 
         {:decided, v} ->
-          IO.puts("node #{state.name} decided #{v}")
           send(state.upperLayer, {:decide, v})
           state
 

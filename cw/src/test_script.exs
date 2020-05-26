@@ -1,11 +1,12 @@
 :os.cmd('/bin/rm -f *.beam')
 
-IEx.Helpers.c("test_harness.ex")
-IEx.Helpers.c("paxos_test.ex")
-
 # Replace with your own implementation source files
 IEx.Helpers.c("paxos.ex")
+
 # ##########
+
+IEx.Helpers.c("test_harness.ex")
+IEx.Helpers.c("paxos_test.ex")
 
 # Different configurations to run tests with
 config_3_local = %{
@@ -23,7 +24,7 @@ config_5_local = %{
 }
 
 # Replace the following with the short host name of your machine
-host = "arch"
+host = "elixir"
 
 # ###########
 
@@ -54,7 +55,7 @@ test_suite = [
    "Minority non-leader crashes, no concurrent ballots"}
 ]
 
-if Node.self() == :coord@arch do
+if Node.self() == :coord@elixir do
   Enum.reduce(test_suite, length(test_suite), fn {func, config, n, doc}, acc ->
     IO.puts("============")
     IO.puts("#{inspect(doc)}, #{inspect(n)} time#{if n > 1, do: "s", else: ""}")
