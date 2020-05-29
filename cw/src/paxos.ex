@@ -45,9 +45,10 @@ defmodule Paxos do
   end
 
   defp send_msg(name, msg) do
-    pid = :global.whereis_name(name)
-
-    send(pid, msg)
+    case :global.whereis_name(name) do
+      :undefined -> nil
+      pid -> send(pid, msg)
+    end
   end
 
   defp delete_all_occurences(list, element) do
